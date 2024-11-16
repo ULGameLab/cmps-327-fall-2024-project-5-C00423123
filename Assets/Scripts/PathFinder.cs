@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System;
@@ -6,15 +6,15 @@ using MapGen;
 
 public class Node
 {
-    public Node cameFrom = null; //parent node
+    public Node cameFrom = null; // Parent node
     public double priority = 0; // F value
-    public double costSoFar = 0; // G Value
+    public double costSoFar = 0; // G value
     public Tile tile;
 
     public Node(Tile _tile, double _priority, Node _cameFrom, double _costSoFar)
     {
         cameFrom = _cameFrom;
-        priority = _priority; 
+        priority = _priority;
         costSoFar = _costSoFar;
         tile = _tile;
     }
@@ -24,91 +24,140 @@ public class PathFinder
 {
     List<Node> TODOList = new List<Node>();
     List<Node> DoneList = new List<Node>();
-    Tile goalTile; 
+    Tile goalTile;
+    List<Enemy> enemies;
 
-
-    // This is the constructor
-    public PathFinder()
+    // Constructor
+    public PathFinder(List<Enemy> _enemies)
     {
         goalTile = null;
+        enemies = _enemies; // Initialize with the list of enemies
     }
 
-    // TODO: Find the path based on A-Star Algorithm
+    
     public Queue<Tile> FindPathAStar(Tile start, Tile goal)
     {
         TODOList = new List<Node>();
         DoneList = new List<Node>();
 
-        TODOList.Add(new Node(start, 0, null, 0));
+        TODOList.Add(new Node(start, 0, null, 0)); 
         goalTile = goal;
 
         while (TODOList.Count > 0)
         {
-            TODOList.Sort((x, y) => (x.priority.CompareTo(y.priority))); // This will keep the TODO List sorted based on the F cost
+            TODOList.Sort((x, y) => x.priority.CompareTo(y.priority)); 
             Node current = TODOList[0];
             DoneList.Add(current);
             TODOList.RemoveAt(0);
 
             if (current.tile == goal)
             {
-                return RetracePath(current);  // Returns the Path if goal is reached
+                return RetracePath(current); 
             }
 
-            // for each neighboring tile calculate the costs
-            // You just need to fill code inside this foreach only
             foreach (Tile nextTile in current.tile.Adjacents)
             {
-                
+                if (DoneList.Exists(node => node.tile == nextTile))
+                    continue;
+
+                // Calculate costs
+                double newCostToNeighbor = current.costSoFar + 10; 
+                double priority = newCostToNeighbor + HeuristicsDistance(nextTile, goal);
+
+                Node neighborNode = TODOList.Find(node => node.tile == nextTile);
+                if (neighborNode == null)
+                {
+                    neighborNode = new Node(nextTile, priority, current, newCostToNeighbor);
+                    TODOList.Add(neighborNode);
+                }
+                else if (newCostToNeighbor < neighborNode.costSoFar)
+                {
+                    neighborNode.costSoFar = newCostToNeighbor;
+                    neighborNode.priority = priority;
+                    neighborNode.cameFrom = current;
+                }
             }
         }
-        return new Queue<Tile>(); // Returns an empty Path if no path is found
+        return new Queue<Tile>(); 
     }
 
-    // TODO: Find the path based on A-Star Algorithm
-    // In this case avoid a path passing near an enemy tile
-    // BONUS TASK (Required the for Honors Contract Students)
+    // A* Algorithm with enemy evasion 
     public Queue<Tile> FindPathAStarEvadeEnemy(Tile start, Tile goal)
     {
         TODOList = new List<Node>();
         DoneList = new List<Node>();
 
-        TODOList.Add(new Node(start, 0, null, 0));
+        TODOList.Add(new Node(start, 0, null, 0)); 
         goalTile = goal;
 
         while (TODOList.Count > 0)
         {
-            TODOList.Sort((x, y) => (x.priority.CompareTo(y.priority))); // This will keep the TODO List sorted
+            TODOList.Sort((x, y) => x.priority.CompareTo(y.priority)); 
             Node current = TODOList[0];
             DoneList.Add(current);
             TODOList.RemoveAt(0);
 
             if (current.tile == goal)
             {
-                return RetracePath(current);  // Returns the Path if goal is reached
+                return RetracePath(current); 
             }
 
-            // for each neighboring tile calculate the costs
-            // You just need to fill code inside this foreach only
-            // Just increase the F cost of the enemy tile and the tiles around it by a certain ammount (say 30)
             foreach (Tile nextTile in current.tile.Adjacents)
             {
+                if (DoneList.Exists(node => node.tile == nextTile))
+                    continue;
 
+                
+                double penalty = IsTileNearEnemy(nextTile) ? 30 : 0; 
+                double newCostToNeighbor = current.costSoFar + 10 + penalty; 
+                double priority = newCostToNeighbor + HeuristicsDistance(nextTile, goal);
+
+                Node neighborNode = TODOList.Find(node => node.tile == nextTile);
+                if (neighborNode == null)
+                {
+                    neighborNode = new Node(nextTile, priority, current, newCostToNeighbor);
+                    TODOList.Add(neighborNode);
+                }
+                else if (newCostToNeighbor < neighborNode.costSoFar)
+                {
+                    neighborNode.costSoFar = newCostToNeighbor;
+                    neighborNode.priority = priority;
+                    neighborNode.cameFrom = current;
+                }
             }
         }
-        return new Queue<Tile>(); // Returns an empty Path
+        return new Queue<Tile>(); 
     }
 
-    // Manhattan Distance with horizontal/vertical cost of 10
+    // Check if the tile is near an enemy (used for evasion)
+    private bool IsTileNearEnemy(Tile tile)
+    {
+        if (enemies == null || enemies.Count == 0)
+    {
+        return false;
+    }
+
+        float threshold = 5.0f; 
+        foreach (Enemy enemy in enemies)
+        {
+            
+            if (enemy != null && Vector3.Distance(tile.transform.position, enemy.transform.position) < threshold)
+            {
+                return true; 
+            }
+        }
+        return false; 
+    }
+
+    // Manhattan Distance heuristic (used for A* pathfinding)
     double HeuristicsDistance(Tile currentTile, Tile goalTile)
     {
         int xdist = Math.Abs(goalTile.indexX - currentTile.indexX);
         int ydist = Math.Abs(goalTile.indexY - currentTile.indexY);
-        // Assuming cost to move horizontally and vertically is 10
-        //return manhattan distance
-        return (xdist * 10 + ydist * 10);
+        return (xdist + ydist) * 10; 
     }
 
-    // Retrace path from a given Node back to the start Node
+    
     Queue<Tile> RetracePath(Node node)
     {
         List<Tile> tileList = new List<Tile>();
@@ -121,7 +170,7 @@ public class PathFinder
         return new Queue<Tile>(tileList);
     }
 
-    // Generate a Random Path. Used for enemies
+    // Generate a Random Path (used for enemies)
     public Queue<Tile> RandomPath(Tile start, int stepNumber)
     {
         List<Tile> tileList = new List<Tile>();
@@ -129,7 +178,6 @@ public class PathFinder
         for (int i = 0; i < stepNumber; i++)
         {
             Tile nextTile;
-            //find random adjacent tile different from last one if there's more than one choice
             if (currentTile.Adjacents.Count < 0)
             {
                 break;
@@ -164,8 +212,6 @@ public class PathFinder
 
     private void ShuffleTiles<T>(List<T> list)
     {
-        // Knuth shuffle algorithm :: 
-        // courtesy of Wikipedia :) -> https://forum.unity.com/threads/randomize-array-in-c.86871/
         for (int t = 0; t < list.Count; t++)
         {
             T tmp = list[t];
@@ -175,3 +221,4 @@ public class PathFinder
         }
     }
 }
+
